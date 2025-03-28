@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Occupation Search Platform
 
 A comprehensive platform for Australian skilled migration pathways, built with React, TypeScript, and Firebase.
@@ -184,3 +185,6 @@ The application can be deployed to:
 ## License
 
 This project is licensed under the MIT License.
+=======
+# OccupationSearch
+>>>>>>> b01c54084da1aa54c498f293f7429d555d9ae658
