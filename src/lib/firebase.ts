@@ -209,7 +209,7 @@ export const isSuperAdmin = async (uid: string): Promise<boolean> => {
     if (!userDoc.exists()) return false;
 
     const { email, role } = userDoc.data();
-    return role === 'superAdmin' || email === 'info@occupationsearch.com.au';
+    return role === 'superAdmin' || email === 'admin4545@gmail.com';
   } catch (error) {
     console.error('Error checking super admin status:', error);
     return false;
