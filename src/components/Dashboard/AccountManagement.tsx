@@ -114,13 +114,13 @@ const AccountManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [isPremium, setIsPremium] = useState(false)
 
-  useEffect(()=>{
-    const checkPremium=async()=>{
-      const newPremiumStatus = auth.currentUser?await getPremiumStatus(app):false
+  useEffect(() => {
+    const checkPremium = async () => {
+      const newPremiumStatus = auth.currentUser ? await getPremiumStatus(app) : false
       setIsPremium(newPremiumStatus)
     }
     checkPremium()
-  },[app,auth.currentUser?.uid])
+  }, [app, auth.currentUser?.uid])
 
   // Logo states
   const [logo, setLogo] = useState<string>("")
@@ -378,20 +378,54 @@ const AccountManagement: React.FC = () => {
         return
       }
 
-      // Get the payments subcollection
+      // Get the subscriptions subcollection
+      const subscriptionsRef = collection(customerRef, "subscriptions")
+      const subscriptionsSnapshot = await getDocs(subscriptionsRef)
+
+      const fetchedInvoices: Invoice[] = []
+      const processedInvoiceIds = new Set<string>() // Track processed invoice IDs
+
+      // For each subscription, get the invoices subcollection
+      for (const subscriptionDoc of subscriptionsSnapshot.docs) {
+        const invoicesRef = collection(subscriptionDoc.ref, "invoices")
+        const invoicesSnapshot = await getDocs(invoicesRef)
+
+        invoicesSnapshot.forEach((invoiceDoc) => {
+          const invoiceData = invoiceDoc.data()
+          const invoiceId = invoiceData.id || `INV-${invoiceDoc.id.substring(0, 6)}`
+
+          // Skip if we've already processed this invoice ID
+          if (processedInvoiceIds.has(invoiceId)) return
+
+          processedInvoiceIds.add(invoiceId)
+          fetchedInvoices.push({
+            id: invoiceId,
+            date: new Date(invoiceData.created * 1000).toISOString().split("T")[0],
+            amount: `$${(invoiceData.amount_paid / 100).toFixed(2)}`,
+            status: invoiceData.status || "Paid",
+            pdfUrl: invoiceData.invoice_pdf || null,
+          })
+        })
+      }
+
+      // Also get the payments subcollection for backward compatibility
       const paymentsRef = collection(customerRef, "payments")
       const paymentsSnapshot = await getDocs(paymentsRef)
 
-      const fetchedInvoices: Invoice[] = []
-
       paymentsSnapshot.forEach((doc) => {
         const paymentData = doc.data()
+        const invoiceId = paymentData.invoice || `INV-${doc.id.substring(0, 6)}`
+
+        // Skip if we've already processed this invoice ID
+        if (processedInvoiceIds.has(invoiceId)) return
+
+        processedInvoiceIds.add(invoiceId)
         fetchedInvoices.push({
-          id: paymentData.invoice || `INV-${doc.id.substring(0, 6)}`,
+          id: invoiceId,
           date: new Date(paymentData.created * 1000).toISOString().split("T")[0],
           amount: `$${(paymentData.amount / 100).toFixed(2)}`,
           status: paymentData.status || "Paid",
-          pdfUrl: paymentData.receipt_url || paymentData.invoice_pdf || paymentData.hosted_invoice_url || null,
+          pdfUrl: paymentData.invoice_pdf || null,
         })
       })
 
@@ -402,7 +436,15 @@ const AccountManagement: React.FC = () => {
     }
   }
 
-
+  const downloadPdf = (invoiceId: string) => {
+    const invoice = invoices.find((inv) => inv.id === invoiceId)
+    if (invoice?.pdfUrl) {
+      window.open(invoice.pdfUrl, "_blank")
+    } else {
+      setError("PDF not available for this invoice")
+      setTimeout(() => setError(null), 3000)
+    }
+  }
 
   // Add a function to fetch subscription data
   const fetchSubscriptionData = async () => {
@@ -807,9 +849,9 @@ const AccountManagement: React.FC = () => {
     try {
       const userId = auth.currentUser?.uid // Get the current user's ID
       if (!userId) throw new Error("User not authenticated")
-        let priceId=''
+      let priceId = ""
       const planKey = planName.toLowerCase()
-      billingCycle==='month'?priceId = priceIdsmonth[planKey]:priceId=priceIdsyear[planKey]
+      billingCycle === "month" ? (priceId = priceIdsmonth[planKey]) : (priceId = priceIdsyear[planKey])
 
       if (!priceId) {
         throw new Error(`No price ID found for plan: ${planName}`)
@@ -851,10 +893,9 @@ const AccountManagement: React.FC = () => {
     }
   }
 
-  const manageSubscription =async()=>{
+  const manageSubscription = async () => {
     const portalUrl = await getPortalUrl(app)
-    window.location.href=portalUrl
-
+    window.location.href = portalUrl
   }
 
   // Handle the upgrade button click
@@ -980,8 +1021,8 @@ const AccountManagement: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {invoices.map((invoice) => (
-                    <tr key={invoice.id} className="hover:bg-gray-50">
+                  {invoices.map((invoice, index) => (
+                    <tr key={`${invoice.id}-${index}`} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{invoice.id}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{invoice.date}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{invoice.amount}</td>
@@ -995,7 +1036,7 @@ const AccountManagement: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <button
                           className={`${getThemeColors().highlight} hover:opacity-80 flex items-center gap-1`}
-                          
+                          onClick={() => downloadPdf(invoice.id)}
                         >
                           <Download className="w-4 h-4" />
                           PDF
@@ -1041,14 +1082,20 @@ const AccountManagement: React.FC = () => {
 
             <div className="space-y-6">
               {/* Plan details */}
-              <div className="flex justify-between"><div className="flex items-baseline gap-2 justify-center mb-6">
-                <span className="text-3xl font-bold">${savedPlan.price}</span>
-                <span className="text-gray-500">/{savedPlan.billingCycle === "month" ? "month" : "year"}</span>
+              <div className="flex justify-between">
+                <div className="flex items-baseline gap-2 justify-center mb-6">
+                  <span className="text-3xl font-bold">${savedPlan.price}</span>
+                  <span className="text-gray-500">/{savedPlan.billingCycle === "month" ? "month" : "year"}</span>
+                </div>
+                <div>
+                  <button
+                    onClick={manageSubscription}
+                    className={`px-4 py-2 ${getThemeColors().button} text-white rounded-lg transition-colors`}
+                  >
+                    Manage Subscription
+                  </button>
+                </div>
               </div>
-              <div>
-                <button onClick={manageSubscription} className={`px-4 py-2 ${getThemeColors().button} text-white rounded-lg transition-colors`}>Manage Subscription</button>
-                </div></div>
-              
 
               {/* Features list */}
               <div>
