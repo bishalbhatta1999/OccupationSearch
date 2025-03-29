@@ -7,6 +7,7 @@ import { db, auth } from "../../lib/firebase"
 import { useNavigate } from "react-router-dom"
 import { Loader2, Users, Building, CreditCard } from "lucide-react"
 import AdminUserManagement from "../AdminPages/AdminUserManagement"
+import Subscriptions from "../AdminPages/Subscriptions"
 
 interface DashboardStats {
   totalCompanies: number
@@ -148,13 +149,8 @@ const SuperAdminDashboard: React.FC = () => {
 
   if (!isAuthorized) {
     return null // Will redirect in useEffect
-
-
   }
 
-
-  
-  
   const renderDashboard = () => (
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -268,7 +264,7 @@ const SuperAdminDashboard: React.FC = () => {
             <button
               onClick={() => setActiveTab("subscriptions")}
               className={`pb-4 text-sm font-medium ${
-                activeTab === "tenants"
+                activeTab === "subscriptions"
                   ? "text-blue-600 border-b-2 border-blue-600"
                   : "text-gray-500 hover:text-gray-700"
               }`}
@@ -288,10 +284,11 @@ const SuperAdminDashboard: React.FC = () => {
             <p className="text-gray-500 text-sm italic">Tenant management features coming soon.</p>
           </div>
         )}
-        
+        {activeTab === "subscriptions" && <Subscriptions />}
       </div>
     </div>
   )
 }
 
 export default SuperAdminDashboard
+
