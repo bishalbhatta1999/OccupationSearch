@@ -74,7 +74,7 @@ const SuperAdminDashboard: React.FC = () => {
       const totalCompanies = companiesSnapshot.size
 
       // Get active companies (with active subscription)
-      const activeCompaniesQuery = query(companiesRef, where("subscriptionStatus", "==", "active"))
+      const activeCompaniesQuery = query(companiesRef, where("status", "==", "active"))
       const activeCompaniesSnapshot = await getDocs(activeCompaniesQuery)
       const activeCompanies = activeCompaniesSnapshot.size
 

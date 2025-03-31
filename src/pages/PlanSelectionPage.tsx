@@ -91,13 +91,13 @@ const PlanSelectionPage: React.FC = () => {
 
   // Price IDs for Stripe checkout
   const priceIdsmonth = {
-    standard: " price_1R7vXrAYoTzSaNKS3KCv8Fzu",
+    standard: "price_1R7vXrAYoTzSaNKS3KCv8Fzu",
     premium: "price_1R7vXtAYoTzSaNKSV13x5MLp",
     enterprise: "price_1R7vXuAYoTzSaNKShilrrBbP",
   }
 
   const priceIdsyear = {
-    standard: " price_1R7vXsAYoTzSaNKSawQiO7WO",
+    standard: "price_1R7vXsAYoTzSaNKSawQiO7WO",
     premium: "price_1R7vXtAYoTzSaNKS2nZNjCD4",
     enterprise: "price_1R7vXuAYoTzSaNKSIKDFE15j",
   }

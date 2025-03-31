@@ -852,13 +852,13 @@ const AccountManagement: React.FC = () => {
   }
 
   const priceIdsmonth = {
-    standard: " price_1R7vXrAYoTzSaNKS3KCv8Fzu",
+    standard: "price_1R7vXrAYoTzSaNKS3KCv8Fzu",
     premium: "price_1R7vXtAYoTzSaNKSV13x5MLp",
     enterprise: "price_1R7vXuAYoTzSaNKShilrrBbP",
   }
 
   const priceIdsyear = {
-    standard: " price_1R7vXsAYoTzSaNKSawQiO7WO",
+    standard: "price_1R7vXsAYoTzSaNKSawQiO7WO",
     premium: "price_1R7vXtAYoTzSaNKS2nZNjCD4",
     enterprise: "price_1R7vXuAYoTzSaNKSIKDFE15j",
   }
@@ -947,12 +947,12 @@ const AccountManagement: React.FC = () => {
   // Add this after the other useEffect hooks
   useEffect(() => {
     // Check if we need to refresh subscription data from Firestore
-  const handleCloseFeatures = () => {
-    setShowFeaturesModal(false)
-  }
+    const handleCloseFeatures = () => {
+      setShowFeaturesModal(false)
+    }
 
-  const themeColors = getThemeColors()
-  },[])
+    const themeColors = getThemeColors()
+  }, [])
   // Add this after the other useEffect hooks
   useEffect(() => {
     // Check if we need to refresh subscription data from Firestore
@@ -1697,4 +1697,3 @@ const AccountManagement: React.FC = () => {
   )
 }
 export default AccountManagement
-
