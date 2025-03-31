@@ -1,61 +1,52 @@
-import React, { useState, useEffect } from 'react';
-import {
-  createUserWithEmailAndPassword,
-  updateProfile,
-  sendEmailVerification,
-} from 'firebase/auth';
-import {
-  doc,
-  setDoc,
-  collection,
-  getDocs,
-  addDoc,
-  query,
-  where,
-} from 'firebase/firestore';
-import { auth, db } from '../../lib/firebase';
-import { AlertCircle, Loader2, X } from 'lucide-react';
+"use client"
+
+import type React from "react"
+import { useState } from "react"
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from "firebase/auth"
+import { doc, setDoc, collection, getDocs, addDoc, query, where } from "firebase/firestore"
+import { auth, db } from "../../lib/firebase"
+import { AlertCircle, Loader2, X } from "lucide-react"
 
 interface SignupFormProps {
-  onClose: () => void;
-  onSuccess: () => void;
+  onClose: () => void
+  onSuccess: () => void
 }
 
 const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    phone: '',
-    email: '',
-    companyRegisteredName: '',
-    businessName: '',
-    companyDomain: '',
-    adminEmail: '',
-    password: '',
-    confirmPassword: '',
-  });
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+    companyRegisteredName: "",
+    businessName: "",
+    companyDomain: "",
+    adminEmail: "",
+    password: "",
+    confirmPassword: "",
+  })
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Check if this is the superadmin email
-  const isSuperAdmin = (userID: string) => {
-    return userID === 'OS428136';
-  };
+  const isSuperAdmin = (userEmail: string) => {
+    return userEmail === "admin4545@gmail.com"
+  }
 
   // Handle input changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({
       ...prev,
       [e.target.name]: e.target.value,
-    }));
-  };
+    }))
+  }
 
   // Submit
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
 
     try {
       const {
@@ -69,37 +60,34 @@ const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
         adminEmail,
         password,
         confirmPassword,
-      } = formData;
+      } = formData
 
       // 1) Basic validation
-      if (!firstName || !lastName) throw new Error('Please enter first and last name');
-      if (!email) throw new Error('Please enter your email');
-      if (!phone) throw new Error('Please enter your phone number');
+      if (!firstName || !lastName) throw new Error("Please enter first and last name")
+      if (!email) throw new Error("Please enter your email")
+      if (!phone) throw new Error("Please enter your phone number")
       if (!companyRegisteredName || !businessName || !companyDomain) {
-        throw new Error('Please enter all company details');
+        throw new Error("Please enter all company details")
       }
-      if (password !== confirmPassword) throw new Error("Passwords don't match");
-      if (password.length < 6) throw new Error('Password must be at least 6 characters');
+      if (password !== confirmPassword) throw new Error("Passwords don't match")
+      if (password.length < 6) throw new Error("Password must be at least 6 characters")
 
       // 2) Check domain uniqueness
-      const companyQuery = query(
-        collection(db, 'companies'),
-        where('domain', '==', companyDomain),
-      );
-      const companySnapshot = await getDocs(companyQuery);
+      const companyQuery = query(collection(db, "companies"), where("domain", "==", companyDomain))
+      const companySnapshot = await getDocs(companyQuery)
       if (!companySnapshot.empty) {
-        throw new Error('A company with this domain already exists');
+        throw new Error("A company with this domain already exists")
       }
 
       // 3) Create user in Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const userId = userCredential.user.uid;
-      
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      const userId = userCredential.user.uid
+
       // Determine if this is the superadmin
-      const isAdmin = isSuperAdmin(email);
+      const isAdmin = isSuperAdmin(email)
 
       // 4) Create the company doc
-      const companyDoc = await addDoc(collection(db, 'companies'), {
+      const companyDoc = await addDoc(collection(db, "companies"), {
         registeredName: companyRegisteredName,
         businessName,
         domain: companyDomain,
@@ -108,49 +96,53 @@ const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
         updatedAt: new Date().toISOString(),
         ownerId: userId,
         users: [userId],
-        status: 'active',
+        status: "active",
         maxUsers: 3,
-      });
+      })
 
       // 5) Create the user doc
-      await setDoc(doc(db, 'users', userId), {
+      await setDoc(doc(db, "users", userId), {
         userId: `OS${Date.now().toString().slice(-6)}`,
         firstName,
         lastName,
         email,
         phone,
-        role: isAdmin ? 'superAdmin' : 'user',
+        role: isAdmin ? "superAdmin" : "user",
         isAdmin: true,
-        permissions: ['read'],
+        permissions: ["read"],
         createdAt: new Date().toISOString(),
         emailVerified: false,
         ownerId: userCredential.user.uid,
-        companyId: companyDoc.id
-      });
+        companyId: companyDoc.id,
+      })
 
       // 6) Email verification + displayName
-      await sendEmailVerification(userCredential.user);
+      await sendEmailVerification(userCredential.user)
       await updateProfile(userCredential.user, {
         displayName: `${firstName} ${lastName}`,
-      });
+      })
 
-      setError('Account created! Check your email to verify your account.');
-      onSuccess();
+      setError("Account created! Redirecting to plan selection...")
+
+      // Redirect to plan selection page after successful signup
+      setTimeout(() => {
+        isAdmin? window.location.href="/":window.location.href = "/select-plan"
+        
+      }, 1500)
+
+      onSuccess()
     } catch (err) {
-      console.error('Signup error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create account');
+      console.error("Signup error:", err)
+      setError(err instanceof Error ? err.message : "Failed to create account")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-auto p-6">
       {/* Close button (X) */}
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full"
-      >
+      <button onClick={onClose} className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full">
         <X className="w-5 h-5 text-gray-500" />
       </button>
 
@@ -260,9 +252,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
 
           {/* Admin Email */}
           <div className="flex flex-col">
-            <label className="text-sm font-medium mb-1">
-              Admin Email (optional)
-            </label>
+            <label className="text-sm font-medium mb-1">Admin Email (optional)</label>
             <input
               type="email"
               name="adminEmail"
@@ -301,11 +291,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
 
           {/* Footer Buttons (span both columns) */}
           <div className="col-span-2 flex justify-end gap-2 mt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md"
-            >
+            <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md">
               Cancel
             </button>
             <button
@@ -319,14 +305,15 @@ const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
                   Creating...
                 </>
               ) : (
-                'Create Account'
+                "Create Account"
               )}
             </button>
           </div>
         </form>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default SignupForm;
+export default SignupForm
+

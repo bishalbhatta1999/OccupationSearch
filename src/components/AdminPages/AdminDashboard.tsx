@@ -130,7 +130,7 @@ const AdminDashboard: React.FC = () => {
   const handleSignOut = async () => {
     try {
       await auth.signOut()
-      navigate("/admin")
+      navigate("/")
     } catch (err) {
       console.error("Sign out error:", err)
     }

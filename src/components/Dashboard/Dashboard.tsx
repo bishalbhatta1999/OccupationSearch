@@ -53,6 +53,8 @@ import AccountManagement from "./AccountManagement"
 import Support from "./Support"
 import Reports from "./Reports"
 import TicketDetail from "./TicketDetail"
+// Add this import at the top
+import TrialBanner from "../TrialBanner"
 
 interface NavItem {
   icon: React.ElementType
@@ -91,6 +93,7 @@ const Dashboard: React.FC = () => {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [dashboardError, setDashboardError] = useState<string | null>(null)
   const [showAdminPortal, setShowAdminPortal] = useState(false)
+  const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null)
 
   // Notifications state
   const [notifications, setNotifications] = useState<any[]>([])
@@ -117,13 +120,74 @@ const Dashboard: React.FC = () => {
     }
   }, [])
 
-  // Subscribe to user document changes
+  // Add this function to check if the trial has expired
+  const checkTrialExpiration = (plan: any) => {
+    if (!plan) return true
+
+    // If it's not a trial period, no need to check expiration
+    if (!plan.trialPeriod) return false
+
+    // Check if trial end date exists and is valid
+    if (!plan.trialEndDate) return true
+
+    const trialEndDate = new Date(plan.trialEndDate)
+    const now = new Date()
+
+    // Return true if trial has expired
+    return now > trialEndDate
+  }
+
+  // Update the useEffect that checks for plan selection
   useEffect(() => {
     if (!auth.currentUser) {
       setIsLoading(false)
       return
     }
 
+    // Check if user has selected a plan
+    const userPlanKey = `selectedPlan_${auth.currentUser.uid}`
+    const storedPlan = localStorage.getItem(userPlanKey)
+
+    if (!storedPlan) {
+      // No plan selected, redirect to plan selection page
+      navigate("/select-plan")
+      return
+    }
+
+    try {
+      const parsedPlan = JSON.parse(storedPlan)
+
+      // If no plan name is set, redirect to plan selection
+      if (!parsedPlan.name) {
+        navigate("/select-plan")
+        return
+      }
+
+      // Check if trial has expired
+      const isTrialExpired = checkTrialExpiration(parsedPlan)
+
+      if (isTrialExpired) {
+        // Trial has expired, redirect to trial expired page
+        navigate("/trial-expired")
+        return
+      }
+
+      // Calculate days remaining in trial
+      if (parsedPlan.trialPeriod && parsedPlan.trialEndDate) {
+        const trialEndDate = new Date(parsedPlan.trialEndDate)
+        const now = new Date()
+        const daysRemaining = Math.max(0, Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+
+        // Set trial days remaining in state
+        setTrialDaysRemaining(daysRemaining)
+      }
+    } catch (error) {
+      console.error("Error parsing stored plan:", error)
+      navigate("/select-plan")
+      return
+    }
+
+    // Continue with existing code...
     const unsubscribe = onSnapshot(
       doc(db, "users", auth.currentUser.uid),
       (docSnap) => {
@@ -133,6 +197,32 @@ const Dashboard: React.FC = () => {
           setIsAdmin(data.isAdmin === true)
           setIsSuperAdmin(data.role === "superAdmin")
           setUserRole(data.isAdmin ? "admin" : "user")
+
+          // Also check subscription data from Firestore
+          if (data.subscription) {
+            const isTrialExpired =
+              data.subscription.trialPeriod &&
+              data.subscription.trialEndDate &&
+              new Date() > new Date(data.subscription.trialEndDate)
+
+            if (isTrialExpired && data.subscription.status !== "active") {
+              navigate("/trial-expired")
+              return
+            }
+
+            // Calculate days remaining in trial from Firestore data
+            if (data.subscription.trialPeriod && data.subscription.trialEndDate) {
+              const trialEndDate = new Date(data.subscription.trialEndDate)
+              const now = new Date()
+              const daysRemaining = Math.max(
+                0,
+                Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+              )
+
+              // Set trial days remaining in state
+              setTrialDaysRemaining(daysRemaining)
+            }
+          }
         }
         setIsLoading(false)
       },
@@ -141,8 +231,9 @@ const Dashboard: React.FC = () => {
         setIsLoading(false)
       },
     )
+
     return () => unsubscribe()
-  }, [])
+  }, [navigate])
 
   // Subscribe to notifications (e.g., new leads)
   useEffect(() => {
@@ -678,6 +769,15 @@ const Dashboard: React.FC = () => {
                   Here's what's happening with your migration journey.
                 </p>
               </div>
+
+              {/* Trial Status Banner */}
+              {trialDaysRemaining !== null && trialDaysRemaining > 0 && (
+                <div className="px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-sm font-medium flex items-center">
+                  <Clock className="w-4 h-4 mr-1" />
+                  Trial ends in {trialDaysRemaining} day{trialDaysRemaining !== 1 ? "s" : ""}
+                </div>
+              )}
+
               <div className="flex items-center gap-6 relative">
                 {/* Notifications */}
                 <div className="relative">
@@ -768,6 +868,8 @@ const Dashboard: React.FC = () => {
           {renderContent()}
         </main>
       </div>
+      {/* Trial Banner */}
+      <TrialBanner />
     </div>
   )
 }

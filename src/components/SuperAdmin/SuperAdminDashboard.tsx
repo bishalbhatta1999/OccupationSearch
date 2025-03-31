@@ -226,7 +226,7 @@ const SuperAdminDashboard: React.FC = () => {
           <div className="flex justify-between items-center py-4">
             <h1 className="text-2xl font-bold text-gray-900">Admin Portal</h1>
             <button
-              onClick={() => auth.signOut().then(() => navigate("/admin"))}
+              onClick={() => auth.signOut().then(() => navigate("/"))}
               className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
             >
               Sign Out

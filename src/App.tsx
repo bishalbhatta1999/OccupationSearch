@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Routes, Route, useNavigate, useLocation } from "react-router-dom"
+import { Routes, Route } from "react-router-dom"
 import LandingPage from "./components/LandingPage/LandingPage"
 import Dashboard from "./components/Dashboard/Dashboard"
 import { fetchAnzscoData } from "./services/anzscoService"
@@ -25,11 +25,16 @@ import BlogPage from "./pages/BlogPage"
 import ContactPage from "./pages/ContactPage"
 import PricingPage from "./components/PricingPage"
 import { onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth"
-import { auth, signOutUser, isSuperAdmin } from "./lib/firebase"
+import { auth, signOutUser } from "./lib/firebase"
 import { X } from "lucide-react"
+// If your actual location is different, adjust the path accordingly.
+import { getFirestore, doc, getDoc } from "firebase/firestore"
 
+import { useNavigate } from "react-router-dom"
 import AdminLogin from "./components/AdminPages/AdminLogin"
 import AdminDashboard from "./components/AdminPages/AdminDashboard"
+import PlanSelectionPage from "./pages/PlanSelectionPage"
+import TrialExpiredPage from "./pages/TrialExpiredPage"
 
 interface AuthError {
   code?: string
@@ -71,46 +76,14 @@ function App() {
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [resetEmail, setResetEmail] = useState("")
   const [resetSent, setResetSent] = useState(false)
-  const [userIsSuperAdmin, setUserIsSuperAdmin] = useState(false)
 
   const navigate = useNavigate()
-  const location = useLocation()
 
   useEffect(() => {
     if (isAuthenticated) {
       navigate("/") // Redirect to Dashboard after authentication
     }
   }, [isAuthenticated, navigate])
-
-  // Check if user is super admin
-  useEffect(() => {
-    const checkSuperAdminStatus = async () => {
-      if (auth.currentUser) {
-        try {
-          const superAdminStatus = await isSuperAdmin(auth.currentUser.uid)
-          setUserIsSuperAdmin(superAdminStatus)
-        } catch (error) {
-          console.error("Error checking super admin status:", error)
-          setUserIsSuperAdmin(false)
-        }
-      } else {
-        setUserIsSuperAdmin(false)
-      }
-    }
-
-    checkSuperAdminStatus()
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user)
-      if (user) {
-        checkSuperAdminStatus()
-      } else {
-        setUserIsSuperAdmin(false)
-      }
-    })
-
-    return () => unsubscribe()
-  }, [])
 
   /**
    * Store data from OccupationHeader
@@ -330,7 +303,24 @@ function App() {
     setIsLoading(true)
 
     try {
-      await signInWithEmailAndPassword(auth, email, password)
+      // Sign in the user
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+
+      // Check if the user is an admin by fetching their role from Firestore
+      const db = getFirestore()
+      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid))
+      const userData = userDoc.data()
+
+      // If the user is an admin, prevent sign-in through the regular form
+      if (userData && (userData.role === "superAdmin")) {
+        // Sign out the user immediately
+        await signOutUser()
+        setSignInError("Incorrect Credentials !")
+        setIsLoading(false)
+        return
+      }
+
+      // Regular user - complete sign-in
       setShowAuthModal(false)
       setIsAuthenticated(true)
       setShowLanding(false)
@@ -351,7 +341,6 @@ function App() {
       setIsLoading(false)
     }
   }
-
   const handleSignOut = () => {
     signOutUser()
       .then(() => {
@@ -501,7 +490,7 @@ function App() {
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/admin" element={<AdminLogin />} />
-            <Route path="/admin/dashboard" element={userIsSuperAdmin ? <AdminDashboard /> : <AdminLogin />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route
               path="/pricing"
               element={
@@ -512,6 +501,8 @@ function App() {
                 )
               }
             />
+            <Route path="/select-plan" element={<PlanSelectionPage />} />
+            <Route path="/trial-expired" element={<TrialExpiredPage />} />
           </Routes>
         </main>
         {!isSearching && !isAuthenticated && <Footer />}

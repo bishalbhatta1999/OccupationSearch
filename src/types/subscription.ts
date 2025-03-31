@@ -1,6 +1,5 @@
 // Subscription tiers and features
-export type SubscriptionTier = 'free' | 'basic' | 'professional' | 'enterprise';
-
+export type SubscriptionTier = 'standard' | 'premium' | 'enterprise';
 export interface SubscriptionFeatures {
   occupationSearchLimit: number;
   savedSearches: number;
@@ -40,9 +39,9 @@ export interface SubscriptionPlan {
 // Default subscription plans
 export const subscriptionPlans: SubscriptionPlan[] = [
   {
-    id: 'free',
-    name: 'Free',
-    price: 0,
+    id: 'standard',
+    name: 'Standard',
+    price: 29,
     billingPeriod: 'monthly',
     features: {
       occupationSearchLimit: -1, // Unlimited
@@ -73,9 +72,9 @@ export const subscriptionPlans: SubscriptionPlan[] = [
     description: 'Perfect for individuals and small businesses'
   },
   {
-    id: 'Standard',
-    name: 'Standard',
-    price: 29,
+    id: 'Premium',
+    name: 'Premium',
+    price: 79,
     billingPeriod: 'monthly',
     features: {
       occupationSearchLimit: -1,

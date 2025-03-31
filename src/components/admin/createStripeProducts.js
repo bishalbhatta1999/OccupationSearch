@@ -4,30 +4,31 @@ const stripe = new Stripe(process.env.VITE_STRIPE_SECRET_KEY);  // Replace with 
 
 const subscriptionPlans = [
   {
-    id: 'Free',
-    name: 'Free',
-    description: 'Perfect for individuals and small businesses',
-    prices: [
-      { amount: 0, billingPeriod: 'month' },   // Monthly plan
-      { amount: 0, billingPeriod: 'year' }     // Annual plan
-    ]
-  },
-  {
     id: 'Standard',
     name: 'Standard',
     description: 'Ideal for growing migration agencies',
     prices: [
       { amount: 2900, billingPeriod: 'month' },  // Monthly plan in cents ($29)
-      { amount: 29900, billingPeriod: 'year' }   // Annual plan in cents ($299)
+      { amount: 29000, billingPeriod: 'year' }   // Annual plan in cents ($299)
     ]
   },
+  {
+    id: 'Premium',
+    name: 'Premium',
+    description: 'Perfect for individuals and small businesses',
+    prices: [
+      { amount: 7900, billingPeriod: 'month' },   // Monthly plan
+      { amount: 79000, billingPeriod: 'year' }     // Annual plan
+    ]
+  },
+  
   {
     id: 'Enterprise',
     name: 'Enterprise',
     description: 'For large organizations with advanced needs',
     prices: [
       { amount: 9900, billingPeriod: 'month' },  // Monthly plan in cents ($99)
-      { amount: 99900, billingPeriod: 'year' }   // Annual plan in cents ($999)
+      { amount: 99000, billingPeriod: 'year' }   // Annual plan in cents ($999)
     ]
   }
 ];

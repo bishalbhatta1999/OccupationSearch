@@ -244,7 +244,7 @@ export default function Subscriptions() {
               <h4 className="text-2xl font-bold text-gray-900">
                 {formatCurrency(
                   subscriptions
-                    .filter((sub) => sub.status === "active" && sub.interval === "month")
+                    .filter((sub) => sub.status === "active" && (sub.interval === "month" || sub.interval==="year"))
                     .reduce((sum, sub) => sum + (sub.price || 0), 0),
                 )}
               </h4>
