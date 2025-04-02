@@ -2,64 +2,86 @@
 
 import { useState, useEffect } from "react"
 import { auth } from "../lib/firebase"
-import { getPlanFromLocalStorage, getPlanFromFirestore } from "../utils/trial-status"
+import { getPlanFromLocalStorage, isInTrialPeriod, getTrialDaysRemaining } from "../utils/trial-status"
 
-export type FeatureAccess = {
-  visaCalculator: boolean
-  prospects: boolean
-  [key: string]: boolean
+// Define the return type for the hook
+interface SubscriptionFeatures {
+  featureAccess: {
+    visaCalculator: boolean
+    prospects: boolean
+    documentChecklist: boolean
+    widgetIntegration: boolean
+    apiAccess: boolean
+  }
+  currentPlan: string
+  isTrialPeriod: boolean
+  trialDaysRemaining: number | null
 }
 
-export function useSubscriptionFeatures() {
-  const [featureAccess, setFeatureAccess] = useState<FeatureAccess>({
+export function useSubscriptionFeatures(): SubscriptionFeatures {
+  const [currentPlan, setCurrentPlan] = useState<string>("Standard")
+  const [isTrialPeriod, setIsTrialPeriod] = useState<boolean>(false)
+  const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null)
+
+  // Feature access state
+  const [featureAccess, setFeatureAccess] = useState({
     visaCalculator: false,
     prospects: false,
+    documentChecklist: true,
+    widgetIntegration: false,
+    apiAccess: false,
   })
-  const [isLoading, setIsLoading] = useState(true)
-  const [currentPlan, setCurrentPlan] = useState<string | null>(null)
 
   useEffect(() => {
-    const checkFeatureAccess = async () => {
-      if (!auth.currentUser) {
-        setIsLoading(false)
-        return
+    if (!auth.currentUser) return
+
+    // Get user ID
+    const userId = auth.currentUser.uid
+
+    // Get plan from localStorage
+    const plan = getPlanFromLocalStorage(userId)
+
+    if (plan) {
+      // Set current plan
+      setCurrentPlan(plan.name)
+
+      // Set trial status using utility functions
+      const inTrial = isInTrialPeriod(userId)
+      setIsTrialPeriod(inTrial)
+
+      // Set trial days remaining
+      const daysRemaining = getTrialDaysRemaining(userId)
+      setTrialDaysRemaining(daysRemaining)
+
+      // Set feature access based on plan name
+      // During trial period, all features of the selected plan are available
+      const planName = plan.name.toLowerCase()
+
+      // Base features available to all plans
+      const baseFeatures = {
+        visaCalculator: false,
+        prospects: false,
+        documentChecklist: true,
+        widgetIntegration: false,
+        apiAccess: false,
       }
 
-      try {
-        // First check localStorage for plan info
-        const localPlan = getPlanFromLocalStorage(auth.currentUser.uid)
-
-        // If not in localStorage, check Firestore
-        const plan = localPlan || (await getPlanFromFirestore(auth.currentUser.uid))
-
-        if (!plan) {
-          setIsLoading(false)
-          return
-        }
-
-        // Set current plan name for display purposes
-        setCurrentPlan(plan.name)
-
-        // Determine feature access based on plan
-        const planName = plan.name.toLowerCase()
-
-        setFeatureAccess({
-          // Visa Calculator is available for Premium and Enterprise
-          visaCalculator: planName === "premium" || planName === "enterprise",
-
-          // Prospects is only available for Enterprise
-          prospects: planName === "enterprise",
-        })
-      } catch (error) {
-        console.error("Error checking feature access:", error)
-      } finally {
-        setIsLoading(false)
+      // Premium plan features
+      if (planName.includes("premium") || planName.includes("enterprise")) {
+        baseFeatures.visaCalculator = true
+        baseFeatures.widgetIntegration = true
       }
+
+      // Enterprise plan features
+      if (planName.includes("enterprise")) {
+        baseFeatures.prospects = true
+        baseFeatures.apiAccess = true
+      }
+
+      setFeatureAccess(baseFeatures)
     }
+  }, [auth.currentUser?.uid])
 
-    checkFeatureAccess()
-  }, [])
-
-  return { featureAccess, isLoading, currentPlan }
+  return { featureAccess, currentPlan, isTrialPeriod, trialDaysRemaining }
 }
 

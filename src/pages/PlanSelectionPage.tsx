@@ -7,6 +7,7 @@ import { doc, getDoc, updateDoc } from "firebase/firestore"
 import { auth, db, firebaseConfig } from "../lib/firebase"
 import { Check, Loader2 } from "lucide-react"
 import { initializeApp } from "firebase/app"
+import { getCheckoutUrl } from "@/components/admin/stripe-payments"
 
 const PlanSelectionPage: React.FC = () => {
   const navigate = useNavigate()
@@ -28,7 +29,7 @@ const PlanSelectionPage: React.FC = () => {
     }
 
     checkUserAuth()
-  }, [navigate])
+  }, [])
 
   const plans = [
     {
@@ -107,7 +108,8 @@ const PlanSelectionPage: React.FC = () => {
     return `selectedPlan_${userId}`
   }
 
-  // Update the selectPlan function to properly set the trial end date
+  // Update the selectPlan function to ensure it properly sets up the trial period
+
   const selectPlan = async (planId: string, planName: string, planPrice: number) => {
     if (!auth.currentUser) {
       setError("Please sign in to select a plan")
@@ -136,19 +138,20 @@ const PlanSelectionPage: React.FC = () => {
       const trialEndDate = new Date()
       trialEndDate.setDate(trialEndDate.getDate() + 14)
 
-      // Save selected plan to localStorage
+      // Save selected plan to localStorage with explicit trial period flag
       const newPlan = {
         name: planName,
         price: billingCycle === "year" ? planPrice * 10 : planPrice,
         billingCycle: billingCycle,
         userId: userId,
         timestamp: Date.now(),
-        trialPeriod: true,
+        trialPeriod: true, // Explicitly set trial period to true
         trialStartDate: new Date().toISOString(),
         trialEndDate: trialEndDate.toISOString(),
       }
 
       localStorage.setItem(getUserPlanKey(userId), JSON.stringify(newPlan))
+      console.log("Saved plan to localStorage:", newPlan)
 
       // Also save to Firestore for persistence
       const userRef = doc(db, "users", userId)
@@ -160,24 +163,25 @@ const PlanSelectionPage: React.FC = () => {
             plan: planName,
             price: billingCycle === "year" ? planPrice * 10 : planPrice,
             billingCycle: billingCycle,
-            trialPeriod: true,
+            trialPeriod: true, // Explicitly set trial period to true
             trialStartDate: new Date().toISOString(),
             trialEndDate: trialEndDate.toISOString(),
-            status: "active",
+            status: "trialing", // Make sure status is set to "trialing"
             updatedAt: new Date().toISOString(),
           },
         })
+        console.log("Updated subscription in Firestore with trial period")
       }
 
-      // For trial, we can skip Stripe checkout and go directly to dashboard
-      navigate("/")
+      // Get checkout URL with trial period
+      const checkoutUrl = await getCheckoutUrl(app, priceId)
 
-      // If you want to use Stripe checkout instead, uncomment this:
-      // const checkoutUrl = await getCheckoutUrl(app, priceId);
-      // if (!checkoutUrl) {
-      //   throw new Error('Received empty checkout URL');
-      // }
-      // window.location.href = checkoutUrl;
+      if (!checkoutUrl) {
+        throw new Error("Received empty checkout URL")
+      }
+
+      // Redirect to checkout
+      window.location.href = checkoutUrl
     } catch (error) {
       console.error("Error selecting plan:", error)
       setError("Failed to process plan selection. Please try again.")

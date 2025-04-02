@@ -1,32 +1,47 @@
-import { doc, getDoc, updateDoc } from "firebase/firestore"
-import { db } from "../lib/firebase"
+// This utility handles checking and managing trial status
 
-// Interface for plan data
-export interface PlanData {
-  name: string
-  price: number
-  billingCycle: "month" | "year"
-  userId: string
-  timestamp: number
-  trialPeriod: boolean
-  trialStartDate?: string
-  trialEndDate?: string
+/**
+ * Get the selected plan from localStorage for a specific user
+ * @param userId The user ID to get the plan for
+ * @returns The plan object or null if not found
+ */
+export function getPlanFromLocalStorage(userId: string) {
+  try {
+    const planKey = `selectedPlan_${userId}`
+    const storedPlan = localStorage.getItem(planKey)
+
+    if (!storedPlan) {
+      return null
+    }
+
+    return JSON.parse(storedPlan)
+  } catch (error) {
+    console.error("Error getting plan from localStorage:", error)
+    return null
+  }
 }
 
-// Get the user-specific localStorage key
-export const getUserPlanKey = (userId: string) => {
-  return `selectedPlan_${userId}`
-}
+/**
+ * Check if a user's trial has expired
+ * @param userId The user ID to check
+ * @returns True if trial has expired, false otherwise
+ */
+export function isTrialExpired(userId: string): boolean {
+  const plan = getPlanFromLocalStorage(userId)
 
-// Check if trial has expired
-export const isTrialExpired = (plan: PlanData | null): boolean => {
-  if (!plan) return true
+  if (!plan) {
+    return true // No plan means no active trial
+  }
 
-  // If it's not a trial period, no need to check expiration
-  if (!plan.trialPeriod) return false
+  // If it's not a trial period, it can't be expired
+  if (!plan.trialPeriod) {
+    return false
+  }
 
   // Check if trial end date exists and is valid
-  if (!plan.trialEndDate) return true
+  if (!plan.trialEndDate) {
+    return true // No end date means expired
+  }
 
   const trialEndDate = new Date(plan.trialEndDate)
   const now = new Date()
@@ -35,95 +50,110 @@ export const isTrialExpired = (plan: PlanData | null): boolean => {
   return now > trialEndDate
 }
 
-// Get days remaining in trial
-export const getTrialDaysRemaining = (plan: PlanData | null): number => {
-  if (!plan || !plan.trialPeriod || !plan.trialEndDate) return 0
+/**
+ * Get the number of days remaining in the trial
+ * @param userId The user ID to check
+ * @returns Number of days remaining or null if not in trial
+ */
+export function getTrialDaysRemaining(userId: string): number | null {
+  const plan = getPlanFromLocalStorage(userId)
 
-  const trialEndDate = new Date(plan.trialEndDate)
-  const now = new Date()
-
-  // Calculate days remaining
-  return Math.max(0, Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
-}
-
-// Get plan data from localStorage
-export const getPlanFromLocalStorage = (userId: string): PlanData | null => {
-  const planKey = getUserPlanKey(userId)
-  const storedPlan = localStorage.getItem(planKey)
-
-  if (!storedPlan) return null
-
-  try {
-    return JSON.parse(storedPlan) as PlanData
-  } catch (error) {
-    console.error("Error parsing stored plan:", error)
+  if (!plan || !plan.trialPeriod) {
     return null
   }
-}
 
-// Get plan data from Firestore
-export const getPlanFromFirestore = async (userId: string): Promise<PlanData | null> => {
-  try {
-    const userRef = doc(db, "users", userId)
-    const userDoc = await getDoc(userRef)
+  // If we have a trialEndDate from Stripe, use that
+  if (plan.trialEndDate) {
+    const trialEndDate = new Date(plan.trialEndDate)
+    const now = new Date()
 
-    if (!userDoc.exists() || !userDoc.data().subscription) return null
-
-    const subscription = userDoc.data().subscription
-
-    return {
-      name: subscription.plan || "STANDARD",
-      price: subscription.price || 29,
-      billingCycle: subscription.billingCycle || "month",
-      userId: userId,
-      timestamp: subscription.updatedAt ? new Date(subscription.updatedAt).getTime() : Date.now(),
-      trialPeriod: subscription.trialPeriod || false,
-      trialStartDate: subscription.trialStartDate || undefined,
-      trialEndDate: subscription.trialEndDate || undefined,
+    // If trial has expired, return 0
+    if (now > trialEndDate) {
+      return 0
     }
-  } catch (error) {
-    console.error("Error fetching plan from Firestore:", error)
-    return null
+
+    // Calculate days remaining
+    const daysRemaining = Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    return Math.max(0, daysRemaining)
   }
+
+  // If we don't have a specific end date but know it's a trial,
+  // calculate based on the timestamp + 14 days
+  if (plan.timestamp) {
+    const trialEndDate = new Date(plan.timestamp + 14 * 24 * 60 * 60 * 1000)
+    const now = new Date()
+
+    // If trial has expired, return 0
+    if (now > trialEndDate) {
+      return 0
+    }
+
+    // Calculate days remaining
+    const daysRemaining = Math.ceil((trialEndDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    return Math.max(0, daysRemaining)
+  }
+
+  // If we can't determine days remaining but know it's a trial, return a default
+  return 14
 }
 
-// Update plan in both localStorage and Firestore
-export const updatePlanStatus = async (userId: string, planUpdates: Partial<PlanData>): Promise<boolean> => {
-  try {
-    // Update in localStorage
-    const currentPlan = getPlanFromLocalStorage(userId)
-    if (currentPlan) {
-      const updatedPlan = { ...currentPlan, ...planUpdates }
-      localStorage.setItem(getUserPlanKey(userId), JSON.stringify(updatedPlan))
-    }
+/**
+ * Check if a user is currently in a trial period
+ * @param userId The user ID to check
+ * @returns True if in trial period, false otherwise
+ */
+export function isInTrialPeriod(userId: string): boolean {
+  const plan = getPlanFromLocalStorage(userId)
 
-    // Update in Firestore
-    const userRef = doc(db, "users", userId)
-    const userDoc = await getDoc(userRef)
-
-    if (userDoc.exists()) {
-      const currentSubscription = userDoc.data().subscription || {}
-
-      // Map plan data to subscription format
-      const subscriptionUpdates: any = {}
-      if (planUpdates.name) subscriptionUpdates.plan = planUpdates.name
-      if (planUpdates.price) subscriptionUpdates.price = planUpdates.price
-      if (planUpdates.billingCycle) subscriptionUpdates.billingCycle = planUpdates.billingCycle
-      if ("trialPeriod" in planUpdates) subscriptionUpdates.trialPeriod = planUpdates.trialPeriod
-      if (planUpdates.trialStartDate) subscriptionUpdates.trialStartDate = planUpdates.trialStartDate
-      if (planUpdates.trialEndDate) subscriptionUpdates.trialEndDate = planUpdates.trialEndDate
-
-      subscriptionUpdates.updatedAt = new Date().toISOString()
-
-      await updateDoc(userRef, {
-        subscription: { ...currentSubscription, ...subscriptionUpdates },
-      })
-    }
-
-    return true
-  } catch (error) {
-    console.error("Error updating plan status:", error)
+  if (!plan || !plan.trialPeriod) {
     return false
   }
+
+  return !isTrialExpired(userId)
+}
+
+/**
+ * Get the theme colors based on subscription status
+ * @param userId The user ID to check
+ * @returns Object with theme color classes
+ */
+export function getThemeColors(userId: string) {
+  const plan = getPlanFromLocalStorage(userId)
+
+  // Default theme (no subscription)
+  let theme = {
+    bg: "bg-gray-100",
+    text: "text-gray-800",
+    border: "border-gray-200",
+    button: "bg-blue-600 hover:bg-blue-700",
+    highlight: "bg-blue-100",
+    highlightText: "text-blue-800",
+  }
+
+  if (plan) {
+    if (plan.trialPeriod && !isTrialExpired(userId)) {
+      // Trial theme (orange/amber)
+      theme = {
+        bg: "bg-amber-50",
+        text: "text-amber-800",
+        border: "border-amber-200",
+        button: "bg-amber-600 hover:bg-amber-700",
+        highlight: "bg-amber-100",
+        highlightText: "text-amber-800",
+      }
+    } else {
+      // Paid subscription theme (green)
+      theme = {
+        bg: "bg-green-50",
+        text: "text-green-800",
+        border: "border-green-200",
+        button: "bg-green-600 hover:bg-green-700",
+        highlight: "bg-green-100",
+        highlightText: "text-green-800",
+      }
+    }
+  }
+
+  return theme
 }
 
