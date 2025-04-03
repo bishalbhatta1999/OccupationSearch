@@ -180,6 +180,8 @@ const PlanSelectionPage: React.FC = () => {
         throw new Error("Received empty checkout URL")
       }
 
+      console.log("Redirecting to checkout URL:", checkoutUrl)
+
       // Redirect to checkout
       window.location.href = checkoutUrl
     } catch (error) {

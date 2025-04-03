@@ -6,6 +6,7 @@ import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } 
 import { doc, setDoc, collection, getDocs, addDoc, query, where } from "firebase/firestore"
 import { auth, db } from "../../lib/firebase"
 import { AlertCircle, Loader2, X } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 
 interface SignupFormProps {
   onClose: () => void
@@ -28,6 +29,7 @@ const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   // Check if this is the superadmin email
   const isSuperAdmin = (userEmail: string) => {
@@ -98,6 +100,8 @@ const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
         users: [userId],
         status: "active",
         maxUsers: 3,
+        subscriptionStatus: "active",
+        subscriptionPlan: "standard", // Default to standard plan
       })
 
       // 5) Create the user doc
@@ -122,15 +126,19 @@ const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
         displayName: `${firstName} ${lastName}`,
       })
 
-      setError("Account created! Redirecting to plan selection...")
+      setError("Account created successfully! Redirecting to dashboard...")
+
+      // Call onSuccess to close modals
+      onSuccess()
 
       // Redirect to plan selection page after successful signup
       setTimeout(() => {
-        isAdmin? window.location.href="/":window.location.href = "/select-plan"
-        
+        if (isAdmin) {
+          navigate("/admin/dashboard", { replace: true })
+        } else {
+          navigate("/select-plan", { replace: true })
+        }
       }, 1500)
-
-      onSuccess()
     } catch (err) {
       console.error("Signup error:", err)
       setError(err instanceof Error ? err.message : "Failed to create account")
@@ -149,7 +157,9 @@ const SignupForm: React.FC<SignupFormProps> = ({ onClose, onSuccess }) => {
       <h2 className="text-2xl font-bold mb-4 text-gray-900">Create Account</h2>
 
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-600">
+        <div
+          className={`mb-4 p-4 ${error.includes("successfully") ? "bg-green-50 border border-green-200 text-green-600" : "bg-red-50 border border-red-200 text-red-600"} rounded-lg flex items-center gap-2`}
+        >
           <AlertCircle className="w-5 h-5" />
           <p className="text-sm">{error}</p>
         </div>

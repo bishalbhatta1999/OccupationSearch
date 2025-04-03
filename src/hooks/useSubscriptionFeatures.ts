@@ -19,8 +19,8 @@ interface SubscriptionFeatures {
 }
 
 export function useSubscriptionFeatures(): SubscriptionFeatures {
-  const [currentPlan, setCurrentPlan] = useState<string>("Standard")
-  const [isTrialPeriod, setIsTrialPeriod] = useState<boolean>(false)
+  const [currentPlan, setCurrentPlan] = useState("free")
+  const [isTrialPeriod, setIsTrialPeriod] = useState(false)
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null)
 
   // Feature access state
@@ -54,7 +54,6 @@ export function useSubscriptionFeatures(): SubscriptionFeatures {
       setTrialDaysRemaining(daysRemaining)
 
       // Set feature access based on plan name
-      // During trial period, all features of the selected plan are available
       const planName = plan.name.toLowerCase()
 
       // Base features available to all plans
@@ -79,6 +78,32 @@ export function useSubscriptionFeatures(): SubscriptionFeatures {
       }
 
       setFeatureAccess(baseFeatures)
+    } else {
+      // Set default free plan if no plan is found
+      setCurrentPlan("Free")
+      setIsTrialPeriod(false)
+      setTrialDaysRemaining(null)
+
+      // Set basic features for free plan
+      setFeatureAccess({
+        visaCalculator: false,
+        prospects: false,
+        documentChecklist: true,
+        widgetIntegration: false,
+        apiAccess: false,
+      })
+
+      // Save free plan to localStorage
+      const freePlan = {
+        name: "Free",
+        price: 0,
+        billingCycle: "month",
+        userId: userId,
+        timestamp: Date.now(),
+        trialPeriod: false,
+      }
+
+      localStorage.setItem(`selectedPlan_${userId}`, JSON.stringify(freePlan))
     }
   }, [auth.currentUser?.uid])
 

@@ -40,7 +40,7 @@ export default function BillingPortal() {
               <h3 className="font-semibold text-gray-900">Current Plan</h3>
               <p className="text-sm text-gray-600">
                 {subscriptionPlans.find((p) => p.id === currentPlan)?.name ||
-                  "Free"}
+                  "Standard"}
               </p>
             </div>
           </div>

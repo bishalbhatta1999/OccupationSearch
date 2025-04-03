@@ -3,19 +3,19 @@
 import type React from "react"
 import { AlertCircle, Clock } from "lucide-react"
 import { useNavigate } from "react-router-dom"
+import { useSubscriptionFeatures } from "../hooks/useSubscriptionFeatures"
 
-interface TrialBannerProps {
-  daysRemaining: number | null
-}
+type TrialBannerProps = {}
 
-export const TrialBanner: React.FC<TrialBannerProps> = ({ daysRemaining }) => {
+export const TrialBanner: React.FC<TrialBannerProps> = () => {
   const navigate = useNavigate()
+  const { isTrialPeriod, trialDaysRemaining } = useSubscriptionFeatures()
 
-  if (!daysRemaining) return null
+  if (!isTrialPeriod) return null
 
   // Determine urgency level
-  const isUrgent = daysRemaining <= 3
-  const isWarning = daysRemaining <= 7
+  const isUrgent = trialDaysRemaining <= 3
+  const isWarning = trialDaysRemaining <= 7
 
   // Set styles based on urgency
   const bgColor = isUrgent ? "bg-red-50" : isWarning ? "bg-amber-50" : "bg-blue-50"
@@ -45,20 +45,20 @@ export const TrialBanner: React.FC<TrialBannerProps> = ({ daysRemaining }) => {
           <p className={`text-sm ${textColor}`}>
             {isUrgent ? (
               <strong>
-                Your trial expires in {daysRemaining} {daysRemaining === 1 ? "day" : "days"}! Upgrade now to avoid
-                service interruption.
+                Your trial expires in {trialDaysRemaining} {trialDaysRemaining === 1 ? "day" : "days"}! Upgrade now to
+                avoid service interruption.
               </strong>
             ) : isWarning ? (
               <span>
-                Your trial will expire in {daysRemaining} days. Consider upgrading to continue using all features.
+                Your trial will expire in {trialDaysRemaining} days. Consider upgrading to continue using all features.
               </span>
             ) : (
-              <span>You're currently in a trial period with {daysRemaining} days remaining.</span>
+              <span>You're currently in a trial period with {trialDaysRemaining} days remaining.</span>
             )}
           </p>
           <div className="mt-3 md:mt-0 md:ml-6">
             <button
-              onClick={() => navigate("/billing")}
+              onClick={() => navigate("/select-plan")}
               className={`whitespace-nowrap rounded-md ${buttonBg} px-3 py-2 text-sm font-medium text-white shadow-sm`}
             >
               {isUrgent ? "Upgrade Now" : "View Plans"}

@@ -2,21 +2,12 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Routes, Route } from "react-router-dom"
+import { Routes, Route, Navigate, useLocation } from "react-router-dom"
 import LandingPage from "./components/LandingPage/LandingPage"
 import Dashboard from "./components/Dashboard/Dashboard"
 import { fetchAnzscoData } from "./services/anzscoService"
 import type { Occupation, SectionContent } from "./types"
 import Header from "./components/Header"
-import SearchHero from "./components/SearchHero"
-import OccupationSearch from "./components/OccupationSearch"
-import OccupationHeader from "./components/OccupationHeader"
-import NavigationTabs from "./components/NavigationTabs"
-import VisaEligibility from "./components/sections/VisaEligibility"
-import OccupationDetails from "./components/sections/OccupationDetails"
-import SkillAssessment from "./components/sections/SkillAssessment"
-import StateNomination from "./components/sections/StateNomination"
-import EOIDashboard from "./components/EOIDashboard"
 import Footer from "./components/Footer"
 import SignupForm from "./components/Auth/SignupForm"
 import { SaasProvider } from "./components/SaasProvider"
@@ -25,16 +16,12 @@ import BlogPage from "./pages/BlogPage"
 import ContactPage from "./pages/ContactPage"
 import PricingPage from "./components/PricingPage"
 import { onAuthStateChanged, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth"
-import { auth, signOutUser } from "./lib/firebase"
+import { auth, signOutUser, db } from "./lib/firebase"
 import { X } from "lucide-react"
-// If your actual location is different, adjust the path accordingly.
-import { getFirestore, doc, getDoc } from "firebase/firestore"
-
+import { doc, getDoc } from "firebase/firestore"
 import { useNavigate } from "react-router-dom"
 import AdminLogin from "./components/AdminPages/AdminLogin"
-import AdminDashboard from "./components/AdminPages/AdminDashboard"
 import PlanSelectionPage from "./pages/PlanSelectionPage"
-import TrialExpiredPage from "./pages/TrialExpiredPage"
 
 interface AuthError {
   code?: string
@@ -64,6 +51,7 @@ function App() {
   const [loadingSections, setLoadingSections] = useState<Record<string, boolean>>({})
   const debounceTimeout = useRef<number | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showLanding, setShowLanding] = useState(true)
   const [isSearching, setIsSearching] = useState(false)
@@ -76,20 +64,66 @@ function App() {
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [resetEmail, setResetEmail] = useState("")
   const [resetSent, setResetSent] = useState(false)
+  const [authChecked, setAuthChecked] = useState(false)
 
   const navigate = useNavigate()
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/") // Redirect to Dashboard after authentication
-    }
-  }, [isAuthenticated, navigate])
+  const location = useLocation()
 
   /**
    * Store data from OccupationHeader
    * e.g. { occupation_list: 'MLTSSL', skill_level: '1' }
    */
   const [apiData, setApiData] = useState<{ occupation_list?: string; skill_level?: string } | null>(null)
+
+  // Check authentication status on mount
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setIsAuthenticated(false)
+        setIsAdmin(false)
+        setAuthChecked(true)
+
+        // Don't navigate away if we're on the admin login page
+        if (location.pathname !== "/admin") {
+          navigate("/")
+        }
+        return
+      }
+
+      try {
+        const userDoc = await getDoc(doc(db, "users", user.uid))
+        if (!userDoc.exists()) {
+          navigate("/")
+          return
+        }
+
+        const userData = userDoc.data()
+        const userIsAdmin = userData?.role === "superAdmin"
+        setIsAdmin(userIsAdmin)
+        setIsAuthenticated(true)
+
+        // Redirect based on user type and if they have a plan
+        const hasSelectedPlan = !!localStorage.getItem(`selectedPlan_${user.uid}`)
+
+        if (userIsAdmin) {
+          // Redirect admin to regular dashboard instead of admin dashboard
+          navigate("/dashboard")
+        } else if (!hasSelectedPlan) {
+          navigate("/select-plan")
+        } else {
+          navigate("/dashboard")
+        }
+      } catch (error) {
+        console.error("Error checking user role:", error)
+        setIsAuthenticated(true)
+        setIsAdmin(false)
+      } finally {
+        setAuthChecked(true)
+      }
+    })
+
+    return () => unsubscribe()
+  }, [navigate, location.pathname])
 
   const loadSectionContent = async (section: string) => {
     // For EOI section, we don't need to check for existing content
@@ -215,7 +249,7 @@ function App() {
       const filteredList = occupationsArray.filter(
         (occ: any) =>
           occ?.["Occupation Name"]?.toLowerCase()?.includes(searchLower) ||
-          occ?.["Anzsco Code"]?.toString()?.includes(searchLower) ||
+          occ?.["Anzscocode"]?.toString()?.includes(searchLower) ||
           occ?.["OSCA Code"]?.toString()?.includes(searchLower),
       )
 
@@ -268,14 +302,6 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user)
-    })
-
-    return () => unsubscribe()
-  }, [])
-
   const handleSelect = (occupation: Occupation) => {
     setQuery(occupation.occupation_name)
     setSelectedOccupation(occupation)
@@ -299,6 +325,12 @@ function App() {
       return
     }
 
+    // Check if user is trying to use admin credentials in regular sign-in
+    if (email === "admin4545@gmail.com" && password === "admin4545") {
+      setSignInError("Invalid credentials. Admin accounts must use the admin portal.")
+      return
+    }
+
     setSignInError(null)
     setIsLoading(true)
 
@@ -307,16 +339,16 @@ function App() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
 
       // Check if the user is an admin by fetching their role from Firestore
-      const db = getFirestore()
       const userDoc = await getDoc(doc(db, "users", userCredential.user.uid))
       const userData = userDoc.data()
 
-      // If the user is an admin, prevent sign-in through the regular form
-      if (userData && (userData.role === "superAdmin")) {
-        // Sign out the user immediately
-        await signOutUser()
-        setSignInError("Incorrect Credentials !")
-        setIsLoading(false)
+      // If the user is an admin, redirect to regular dashboard (not admin dashboard)
+      if (userData && userData.role === "superAdmin") {
+        setIsAdmin(true)
+        setShowAuthModal(false)
+        setEmail("")
+        setPassword("")
+        navigate("/dashboard")
         return
       }
 
@@ -326,6 +358,7 @@ function App() {
       setShowLanding(false)
       setEmail("")
       setPassword("")
+      navigate("/dashboard")
     } catch (error: any) {
       console.error("Sign in error:", error)
       if (error.code === "auth/wrong-password") {
@@ -341,11 +374,14 @@ function App() {
       setIsLoading(false)
     }
   }
+
   const handleSignOut = () => {
     signOutUser()
       .then(() => {
         setIsAuthenticated(false)
+        setIsAdmin(false)
         setShowLanding(true)
+        navigate("/")
       })
       .catch((error) => {
         console.error("Error signing out:", error)
@@ -385,16 +421,13 @@ function App() {
 
   const handleHomeClick = () => {
     if (isAuthenticated) {
-      setShowLanding(false)
-      setIsSearching(true)
-      setSelectedOccupation(null)
-      setQuery("")
-      setOccupations([])
+      navigate("/dashboard")
     } else {
       setShowLanding(true)
       setSelectedOccupation(null)
       setQuery("")
       setOccupations([])
+      navigate("/")
     }
   }
 
@@ -412,100 +445,51 @@ function App() {
     setShowLanding(false)
   }
 
+  // Wait for auth check before rendering routes
+  if (!authChecked && location.pathname !== "/admin") {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>
+  }
+
   return (
     <SaasProvider>
       <div className="min-h-screen bg-[conic-gradient(at_top_right,_var(--tw-gradient-stops))] from-sky-50 via-background to-indigo-50">
-        {!isSearching && !isAuthenticated && <Header onHomeClick={handleHomeClick} onSignInClick={handleSignInClick} />}
+        {!isSearching && !isAuthenticated && location.pathname !== "/admin" && (
+          <Header onHomeClick={handleHomeClick} onSignInClick={handleSignInClick} />
+        )}
         <main className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-12 2xl:px-16 py-8">
           <Routes>
             <Route
               path="/"
               element={
                 isAuthenticated ? (
-                  <Dashboard />
-                ) : showLanding ? (
-                  <LandingPage onSignInClick={handleSignInClick} onGetStarted={handleGetStarted} />
+                  <Navigate to="/dashboard" replace />
                 ) : (
-                  <div className="max-w-6xl mx-auto mt-12">
-                    {!selectedOccupation && <SearchHero />}
-                    <OccupationSearch
-                      query={query}
-                      loading={loading}
-                      error={error}
-                      occupations={occupations}
-                      onClear={handleClearSearch}
-                      onSearch={handleSearch}
-                      onSelect={handleSelect}
-                    />
-
-                    {selectedOccupation && (
-                      <div className="mt-8 space-y-6 animate-fadeIn">
-                        <OccupationHeader
-                          occupation={selectedOccupation}
-                          onApiDataLoaded={(data) => setApiData(data)}
-                        />
-
-                        <NavigationTabs
-                          activeSection={activeSection}
-                          loadingSections={loadingSections}
-                          onSectionClick={handleSectionClick}
-                        />
-
-                        <div className="space-y-6 animate-slideDown">
-                          {activeSection === "visa" && (
-                            <VisaEligibility
-                              content={sectionContent.visa}
-                              occupationCode={selectedOccupation.anzsco_code}
-                            />
-                          )}
-
-                          {activeSection === "details" && sectionContent.details && (
-                            <OccupationDetails details={sectionContent.details} occupation={selectedOccupation} />
-                          )}
-
-                          {activeSection === "assessment" && sectionContent.assessment && (
-                            <SkillAssessment
-                              content={sectionContent.assessment}
-                              occupationCode={selectedOccupation.anzsco_code}
-                            />
-                          )}
-
-                          {activeSection === "nomination" && sectionContent.nomination && (
-                            <StateNomination
-                              content={sectionContent.nomination}
-                              occupationCode={selectedOccupation.anzsco_code}
-                              occupationList={apiData?.occupation_list || undefined}
-                            />
-                          )}
-
-                          {activeSection === "eoi" && <EOIDashboard />}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <LandingPage onSignInClick={handleSignInClick} onGetStarted={handleGetStarted} />
                 )
               }
             />
+            <Route path="/dashboard" element={isAuthenticated ? <Dashboard /> : <Navigate to="/" replace />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/blog" element={<BlogPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/admin" element={<AdminLogin />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route
               path="/pricing"
               element={
                 isAuthenticated ? (
-                  <Dashboard />
+                  <Navigate to="/dashboard" replace />
                 ) : (
                   <PricingPage onSignInClick={handleSignInClick} onGetStarted={handleGetStarted} />
                 )
               }
             />
-            <Route path="/select-plan" element={<PlanSelectionPage />} />
-            <Route path="/trial-expired" element={<TrialExpiredPage />} />
+            <Route
+              path="/select-plan"
+              element={isAuthenticated ? <PlanSelectionPage /> : <Navigate to="/" replace />}
+            />
           </Routes>
         </main>
-        {!isSearching && !isAuthenticated && <Footer />}
+        {!isSearching && !isAuthenticated && location.pathname !== "/admin" && <Footer />}
 
         {/* Auth Modal */}
         {showAuthModal && (
@@ -525,43 +509,6 @@ function App() {
               </button>
               <h2 className="text-2xl font-bold mb-4">{showForgotPassword ? "Reset Password" : "Sign In"}</h2>
               <div className="space-y-4">
-                {!showForgotPassword && (
-                  <>
-                    {/* Google Sign In Button */}
-                    {/* <button
-                        onClick={async () => {
-                          try {
-                            await signInWithGoogle();
-                            setShowAuthModal(false);
-                            setIsAuthenticated(true);
-                            setShowLanding(false);
-                          } catch (error) {
-                            console.error("Google sign in error:", error);
-                            setSignInError("Failed to sign in with Google");
-                          }
-                        }}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 
-                               rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <img
-                          src="https://www.google.com/favicon.ico"
-                          alt="Google"
-                          className="w-5 h-5"
-                        />
-                        Sign in with Google
-                      </button> */}
-
-                    {/* <div className="relative">
-                        <div className="absolute inset-0 flex items-center">
-                          <div className="w-full border-t border-gray-300" />
-                        </div>
-                        <div className="relative flex justify-center text-sm">
-                          <span className="px-2 bg-white text-gray-500">Or continue with</span>
-                        </div>
-                      </div> */}
-                  </>
-                )}
-
                 {showForgotPassword ? (
                   <>
                     {resetSent ? (
@@ -636,7 +583,7 @@ function App() {
                     onClick={showForgotPassword ? handleForgotPassword : handleSignIn}
                     disabled={isLoading}
                     className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 
-                             disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     type="button"
                   >
                     {isLoading ? (

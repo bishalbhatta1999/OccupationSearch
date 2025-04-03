@@ -4,7 +4,8 @@ import { getAuth } from "firebase/auth"
 import { addDoc, collection, getDocs, getFirestore, onSnapshot } from "firebase/firestore"
 import { getFunctions, httpsCallable } from "firebase/functions"
 
-// Update the getCheckoutUrl function to ensure the trial period is properly set up
+// Update the getCheckoutUrl function to ensure it redirects back to the dashboard
+// Around line 15, modify the function:
 
 export const getCheckoutUrl = async (app: FirebaseApp, priceId: string): Promise<string> => {
   const auth = getAuth(app)
@@ -20,8 +21,8 @@ export const getCheckoutUrl = async (app: FirebaseApp, priceId: string): Promise
   // Add trial_period_days to the checkout session
   const docRef = await addDoc(checkoutSessionRef, {
     price: priceId,
-    success_url: window.location.origin + "/",
-    cancel_url: window.location.origin + "/account",
+    success_url: window.location.origin + "/dashboard",
+    cancel_url: window.location.origin + "/select-plan",
     trial_period_days: 14, // Set 14-day trial period
     allow_promotion_codes: true,
     metadata: {
@@ -77,8 +78,7 @@ export const getCheckoutUrl = async (app: FirebaseApp, priceId: string): Promise
   })
 }
 
-
- const cancelPreviousSubscription = async (app: FirebaseApp, userId: string) => {
+const cancelPreviousSubscription = async (app: FirebaseApp, userId: string) => {
   const db = getFirestore(app)
   const subsRef = collection(db, "customers", userId, "subscriptions")
   const subsSnap = await getDocs(subsRef)
@@ -94,7 +94,6 @@ export const getCheckoutUrl = async (app: FirebaseApp, priceId: string): Promise
     }
   })
 }
-
 
 export const watchSubscriptions = (app: FirebaseApp, userId: string) => {
   const db = getFirestore(app)
@@ -113,8 +112,6 @@ export const watchSubscriptions = (app: FirebaseApp, userId: string) => {
     })
   })
 }
-
-
 
 export const getPaidCheckoutUrl = async (app: FirebaseApp, priceId: string): Promise<string> => {
   const auth = getAuth(app)
@@ -160,7 +157,6 @@ export const getPaidCheckoutUrl = async (app: FirebaseApp, priceId: string): Pro
     })
   })
 }
-
 
 export const getPortalUrl = async (app: FirebaseApp): Promise<string> => {
   const auth = getAuth(app)

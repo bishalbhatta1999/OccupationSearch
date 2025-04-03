@@ -3,9 +3,10 @@
 import type React from "react"
 import { useState } from "react"
 import { signInWithEmailAndPassword } from "firebase/auth"
-import { auth, isSuperAdmin } from "../../lib/firebase"
+import { auth, db } from "../../lib/firebase"
 import { useNavigate } from "react-router-dom"
 import { AlertCircle, Loader2, Lock } from "lucide-react"
+import { doc, getDoc } from "firebase/firestore"
 
 const AdminLogin: React.FC = () => {
   const [email, setEmail] = useState("")
@@ -24,9 +25,10 @@ const AdminLogin: React.FC = () => {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
 
       // Check if the user is a super admin
-      const isSuperAdminUser = await isSuperAdmin(userCredential.user.uid)
+      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid))
+      const userData = userDoc.data()
 
-      if (!isSuperAdminUser) {
+      if (!userData || userData.role !== "superAdmin") {
         // Sign out if not a super admin
         await auth.signOut()
         setError("Access denied. Only super admins can access this portal.")
@@ -34,11 +36,18 @@ const AdminLogin: React.FC = () => {
         return
       }
 
+      console.log("Admin login successful, redirecting to dashboard")
       // Redirect to admin dashboard
-      navigate("/admin/dashboard")
-    } catch (err) {
+      navigate("/admin/dashboard", { replace: true })
+    } catch (err: any) {
       console.error("Admin login error:", err)
-      setError("Invalid credentials. Please try again.")
+      if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
+        setError("Invalid admin credentials. Please try again.")
+      } else if (err.code === "auth/too-many-requests") {
+        setError("Too many failed login attempts. Please try again later.")
+      } else {
+        setError("An error occurred during login. Please try again.")
+      }
     } finally {
       setLoading(false)
     }
@@ -46,6 +55,9 @@ const AdminLogin: React.FC = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="absolute top-4 left-4 bg-blue-600 text-white px-3 py-1 rounded-md text-sm font-medium">
+        Admin Portal
+      </div>
       <div className="max-w-md w-full bg-white rounded-xl shadow-xl overflow-hidden">
         <div className="p-8">
           <div className="text-center mb-8">
@@ -97,7 +109,7 @@ const AdminLogin: React.FC = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
